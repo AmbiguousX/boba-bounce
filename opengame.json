@@ -1,0 +1,10 @@
+{
+  "$schema": "https://opengame.io/schema/opengame.json",
+  "title": "Boba Bounce",
+  "tagline": "auto",
+  "description": "auto",
+  "genre": "auto",
+  "kind": "game",
+  "controls": "auto",
+  "players": "auto"
+}
