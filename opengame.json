@@ -6,5 +6,8 @@
   "genre": "auto",
   "kind": "game",
   "controls": "auto",
-  "players": "auto"
+  "players": "auto",
+  "build": {
+    "output": "game"
+  }
 }
