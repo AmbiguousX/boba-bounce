@@ -3,6 +3,7 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 import { U, LOW, FOG_COLOR, makeSky, makeEnvironment, makeBobaMaterial, makeTeaMaterial, makeGrassGroundMaterial, makeGlassMaterial,
   addWind, makeGrassTufts, makeParticles, makeMotes, makeRings, makeComposer } from './fx.js';
 import { makeMouth, makeFaceRig } from './face-rig.js';
+import { makeAmBigPlayer } from './ambig.js';
 import { sfx, startMusic, stopMusic, setFever, toggleMute, isMuted } from './audio.js';
 
 // ================================================================ ANIMATIONS (same code as boba-bounce.animations.js)
@@ -669,7 +670,7 @@ function chibiWearables() {
 
 // ---------------------------------------------------------------- player controller (stand-in for your engine's capsule movement)
 function makePlayer(scene, getBouncers) {
-  const chibi = makeChibi();
+  const chibi = makeAmBigPlayer();   // AmBig (the old chibi, makeChibi, is still below if ever wanted)
   scene.add(chibi.root);
   // the physics capsule (hidden) — this is what your engine already moves and syncs
   const capsule = new THREE.Mesh(new THREE.CapsuleGeometry(CHIBI.capR, CHIBI.capLen, 4, 8), new THREE.MeshBasicMaterial({ color: '#6366f1', wireframe: true }));
@@ -934,7 +935,7 @@ function endGame() {
   ui.final.textContent = score; ui.best.textContent = `Best: ${best}`; show(ui.newBest, isBest && score > 0);
   // he turns to face you and the camera comes in close for the results
   { const P = player.P; P.vx = P.vz = 0; P.yaw = camYaw; }
-  camDistGoal = innerWidth > innerHeight ? 2.4 : 3.1; camPitch = 0.2;
+  camDistGoal = innerWidth > innerHeight ? 2.6 : 3.2; camPitch = 0.34;
   overEmotes = isBest && score > 0 ? ['cheer', 'dance', 'wave'] : score >= 30 ? ['proud', 'wave'] : ['shrug', 'wave'];
   overT = 0.5;
   ui.maxCombo.textContent = maxCombo > 1 ? `Longest chain: x${maxCombo}` : '';
