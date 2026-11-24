@@ -15,7 +15,7 @@ export function makeJack({ onReady, onFail } = {}) {
   let mixer = null, idle = null, current = null, clips = {}, morphMeshes = [], ready = false;
   const st = { hop: 0, s: 1, sv: 0, yaw: 0, still: 0, air: 0, heading: 0 };
 
-  new GLTFLoader().load('./assets/flappy-jack.glb', (g) => {
+  const onLoad = (g) => {
     const m = g.scene;
     m.scale.setScalar(SCALE);
     m.traverse((o) => {
@@ -32,7 +32,17 @@ export function makeJack({ onReady, onFail } = {}) {
     idle = mixer.clipAction(clips.Idle); idle.play();
     mixer.addEventListener('finished', (e) => { if (e.action === current) back(); });
     ready = true; onReady?.();
-  }, undefined, (err) => { console.warn('Flappy Jack did not load', err); onFail?.(err); });
+  };
+  const onError = (err) => { console.warn('Flappy Jack did not load', err); onFail?.(err); };
+  // a host that can't serve .glb files can point BOBA_JACK_URL at a .b64.json copy (the file as one base64 string)
+  const src = globalThis.BOBA_JACK_URL || './assets/flappy-jack.glb', loader = new GLTFLoader();
+  if (src.endsWith('.b64.json')) {
+    fetch(src).then((r) => r.json()).then((b64) => {
+      const bin = atob(b64), u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      loader.parse(u8.buffer, '', onLoad, onError);
+    }).catch(onError);
+  } else loader.load(src, onLoad, undefined, onError);
 
   function back() { if (!current) return; current.fadeOut(0.3); idle.reset().fadeIn(0.3).play(); current = null; }
   function emote(name) {
