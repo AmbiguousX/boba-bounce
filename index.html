@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Boba Bounce</title>
-<meta name="description" content="Bounce on as many boba as you can in 2 minutes.">
-<style>:root{--ink:#3a2118;--pink:#ff6f9c;--pink2:#d93a52;--cream:#fff6ea;--tea:#f3dccb;--mint:#9fe3c3} html,body{margin:0;height:100%;overflow:hidden;background:#a9e0ff;font-family:ui-rounded,"SF Pro Rounded","Arial Rounded MT Bold","Nunito","Trebuchet MS",system-ui,sans-serif;-webkit-user-select:none;user-select:none;color:var(--ink)} canvas{display:block;touch-action:none} .hidden{display:none!important} button{font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent} .screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;background:radial-gradient(ellipse at 50% 40%,#fff6ea55,#ffd6e099 70%,#ff9fbfaa)} .card{position:relative;width:min(440px,100%);background:var(--cream);border:4px solid var(--pink);border-radius:32px;padding:30px 26px 26px;box-sizing:border-box;text-align:center;box-shadow:0 10px 0 var(--pink2),0 24px 50px #6a1f3a40;overflow:hidden} .title{margin:0;font-size:clamp(38px,11vw,58px);line-height:.95;font-weight:900;letter-spacing:.02em;color:var(--ink);text-shadow:3px 3px 0 var(--pink),6px 6px 0 #ffd6e0} .title span{display:block} .sub{margin:14px 0 0;font-size:16px;font-weight:700;color:#7a4a3a} .bobas{position:relative;height:96px;margin:14px -8px 6px} .btn{display:block;width:100%;margin-top:12px;padding:15px 18px;border:0;border-radius:999px;font-size:21px;font-weight:900;letter-spacing:.06em;color:#fff;background:var(--pink);box-shadow:0 6px 0 var(--pink2);transition:transform .08s,box-shadow .08s} .btn:active{transform:translateY(4px);box-shadow:0 2px 0 var(--pink2)} .btn:focus-visible{outline:3px solid var(--ink);outline-offset:3px} .btn.ghost{color:var(--pink2);background:#fff;border:3px solid var(--pink);box-shadow:0 5px 0 #ffd6e0} .small{margin:14px 0 0;font-size:13px;font-weight:700;color:#a0796a} .best{margin:10px 0 0;font-size:15px;font-weight:800;color:var(--pink2);min-height:18px} .big{margin:6px 0 0;font-size:84px;font-weight:900;line-height:1;color:var(--ink);text-shadow:4px 4px 0 var(--mint)} .label{font-size:14px;font-weight:800;letter-spacing:.14em;color:#a0796a;text-transform:uppercase} .badge{display:inline-block;margin-top:10px;padding:5px 12px;border-radius:999px;background:var(--mint);font-size:14px;font-weight:900;color:#1f6a4a;animation:wob 1s ease-in-out infinite} @keyframes wob{50%{transform:rotate(-4deg) scale(1.06)}} .bb{position:absolute;bottom:0;width:var(--s);height:var(--s);left:var(--x);animation:hop var(--d) cubic-bezier(.3,.6,.4,1) infinite;animation-delay:var(--dl);transform-origin:50% 100%} .bb i{position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 34% 28%,#8a5a44 0 9%,#4a2a1e 22%,#2b1610 70%)} .bb b{position:absolute;top:34%;width:16%;height:22%;border-radius:50%;background:#fff} .bb b:nth-of-type(1){left:28%} .bb b:nth-of-type(2){right:28%} .bb.blink b{animation:blink 3.6s infinite;animation-delay:var(--dl)} @keyframes blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}} @keyframes hop{ 0%{transform:translateY(0) scale(1.18,.78)} 14%{transform:translateY(0) scale(.88,1.14)} 50%{transform:translateY(calc(var(--h) * -1)) scale(1,1)} 84%{transform:translateY(0) scale(.9,1.1)} 100%{transform:translateY(0) scale(1.18,.78)}} #hud{position:fixed;left:0;right:0;top:max(12px,env(safe-area-inset-top));display:flex;justify-content:space-between;padding:0 max(14px,env(safe-area-inset-left));pointer-events:none} .pill{display:flex;align-items:center;gap:8px;padding:8px 16px;border-radius:999px;background:#fff6eaee;border:3px solid var(--pink);font-size:26px;font-weight:900;box-shadow:0 4px 0 var(--pink2)} .pill .ico{width:22px;height:22px;border-radius:50%;background:radial-gradient(circle at 34% 28%,#8a5a44 0 10%,#2b1610 70%);position:relative} .pill .ico:before,.pill .ico:after{content:"";position:absolute;top:30%;width:4px;height:6px;border-radius:50%;background:#fff} .pill .ico:before{left:28%} .pill .ico:after{right:28%} #time.low{color:var(--pink2);animation:pulse .5s ease-in-out infinite alternate} @keyframes pulse{to{transform:scale(1.12)}} .bump{animation:bump .25s} @keyframes bump{40%{transform:scale(1.18)}} #count{position:fixed;left:50%;top:42%;transform:translate(-50%,-50%);font-size:min(30vw,170px);font-weight:900;color:#fff;text-shadow:0 6px 0 var(--pink2),0 0 30px #ff6f9c99;pointer-events:none} #count.beat{animation:beat .6s ease-out} @keyframes beat{0%{transform:translate(-50%,-50%) scale(1.6);opacity:0}30%{opacity:1}100%{transform:translate(-50%,-50%) scale(1)}} #tip{position:fixed;left:50%;top:calc(42% + min(17vw,100px));transform:translateX(-50%);width:max-content;max-width:calc(100vw - 32px);text-align:center;padding:10px 18px;border-radius:999px;background:#fff6eaee;border:3px solid var(--pink);box-shadow:0 5px 0 var(--pink2);font-size:clamp(16px,4.6vw,24px);font-weight:900;color:var(--ink);pointer-events:none;animation:tipIn .5s ease-out} @keyframes tipIn{from{transform:translate(-50%,12px);opacity:0}} #pops{position:fixed;inset:0;pointer-events:none;overflow:hidden} .pop{position:absolute;transform:translate(-50%,-50%);font-size:30px;font-weight:900;color:#fff;text-shadow:0 3px 0 var(--pink2),0 0 10px #ff6f9c;animation:rise .9s ease-out forwards} @keyframes rise{to{transform:translate(-50%,-160%) scale(1.3);opacity:0}} #pad,#jump{display:none} .touch.playing #pad{display:block;position:fixed;left:max(24px,env(safe-area-inset-left));bottom:max(28px,env(safe-area-inset-bottom));width:110px;height:110px;border-radius:50%;background:#ffffff55;border:2px solid #ffffffaa;touch-action:none} #knob{position:absolute;left:35px;top:35px;width:40px;height:40px;border-radius:50%;background:#d93a52e6;pointer-events:none} .touch.playing #jump{display:block;position:fixed;right:max(28px,env(safe-area-inset-right));bottom:max(40px,env(safe-area-inset-bottom));width:84px;height:84px;border-radius:50%;border:0;background:#d93a52e6;color:#fff;font-size:15px;font-weight:900;touch-action:none} @media (prefers-reduced-motion: reduce){.bb,.badge,#time.low{animation:none}}</style>
+<meta name="description" content="Bounce on boba for two minutes. Chain bounces for combos and catch the golden ones.">
+<link rel="stylesheet" href="./style.css">
 <script type="importmap">
 { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
 </script>
@@ -15,7 +15,7 @@
   <div class="card">
     <h1 class="title"><span>BOBA</span><span>BOUNCE</span></h1>
     <div class="bobas" id="menuBobas"></div>
-    <p class="sub">Bounce on as many boba as you can in 2 minutes!</p>
+    <p class="sub">Bounce on boba for 2 minutes! Chain bounces without landing for combos, and catch the golden ones.</p>
     <button class="btn" id="play">PLAY</button>
     <p class="best" id="menuBest"></p>
     <p class="small" id="controls"></p>
@@ -25,9 +25,10 @@
   <div class="card">
     <div class="label">Time's up!</div>
     <div class="big" id="final">0</div>
-    <div class="label">boba bounces</div>
+    <div class="label">points</div>
     <div class="badge hidden" id="newBest">NEW BEST!</div>
     <p class="best" id="best"></p>
+    <p class="small" id="maxCombo"></p>
     <div class="bobas" id="overBobas"></div>
     <button class="btn" id="again">PLAY AGAIN</button>
     <button class="btn ghost" id="exit">EXIT</button>
@@ -37,11 +38,14 @@
   <div class="pill" aria-label="Time left"><span id="time">2:00</span></div>
   <div class="pill" aria-label="Score"><span class="ico"></span><span id="score">0</span></div>
 </div>
+<div id="combo" class="hidden" aria-live="polite"><span>COMBO</span><b id="comboN">x2</b></div>
+<div id="fever" class="hidden">FEVER! <span>DOUBLE POINTS</span></div>
+<button id="mute" aria-label="Mute sound" title="Mute (M)"><i></i></button>
 <div id="count" class="hidden">3</div>
-<div id="tip" class="hidden">Jump on as many boba as you can!</div>
+<div id="tip" class="hidden">Chain bounces without landing for combos!</div>
 <div id="pops"></div>
 <div id="pad"><div id="knob"></div></div>
 <button id="jump" aria-label="Jump">JUMP</button>
-<script type="module" src="./game.js"></script>
+<script type="module" src="./src/game.js"></script>
 </body>
 </html>

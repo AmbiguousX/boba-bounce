@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+import { U, LOW, FOG_COLOR, makeSky, makeEnvironment, makeBobaMaterial, makeTeaMaterial, makeGrassGroundMaterial, makeGlassMaterial,
+  addWind, makeGrassTufts, makeParticles, makeMotes, makeRings, makeComposer } from './fx.js';
+import { sfx, startMusic, stopMusic, setFever, toggleMute, isMuted } from './audio.js';
 
 // ================================================================ ANIMATIONS (same code as boba-bounce.animations.js)
 // Boba Bounce — animation driver.
@@ -758,54 +761,77 @@ function makePlayer(scene, getBouncers) {
 
 // ================================================================ DEMO
 // ---------------------------------------------------------------- Boba Bounce — the game
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, LOW ? 1.5 : 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
 document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
-{
-  const cv = document.createElement('canvas'); cv.width = 4; cv.height = 256;
-  const g = cv.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 256);
-  gr.addColorStop(0, '#5fb8f5'); gr.addColorStop(0.55, '#a9e0ff'); gr.addColorStop(1, '#fde6ef');
-  g.fillStyle = gr; g.fillRect(0, 0, 4, 256);
-  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; scene.background = t;
-}
-scene.add(new THREE.HemisphereLight('#e2f3ff', '#9ccf7a', 1.2));
-const sun = new THREE.DirectionalLight('#fff3dc', 2.6);
-sun.position.set(25, 45, 30); sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096);
+scene.add(makeSky());
+const ENV = makeEnvironment(renderer);      // reflections only on the shiny things: pearls and glass
+scene.fog = new THREE.Fog(FOG_COLOR, 38, 120);
+scene.add(new THREE.HemisphereLight('#dff1ff', '#8fcf6a', 0.55));
+const sun = new THREE.DirectionalLight('#ffe8c8', 3.0);
+sun.position.set(25, 45, 30); sun.castShadow = true; sun.shadow.mapSize.setScalar(LOW ? 2048 : 4096);
 Object.assign(sun.shadow.camera, { left: -36, right: 36, top: 36, bottom: -36, near: 1, far: 140 });
 sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
 scene.add(sun);
+// a cool fill from the opposite side so shadowed faces read blue-violet, not grey
+const fill = new THREE.DirectionalLight('#b9c8ff', 0.5); fill.position.set(-30, 18, -25); scene.add(fill);
 const root = buildWorld();
 scene.add(root);
+// swap in the shaded materials: milk-tea floor, painted grass, real glass, swaying trees
+root.getObjectByName('static_cup_floor').material = makeTeaMaterial();
+root.getObjectByName('static_ground').material = makeGrassGroundMaterial();
+root.getObjectByName('static_cup_wall_noShadow').material = Object.assign(makeGlassMaterial(), { envMap: ENV });
+root.getObjectByName('static_tree_canopy').material = addWind(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, envMapIntensity: 0.7 }), { from: 2.4, amount: 0.004, key: 'canopy' });
+root.getObjectByName('static_tree_canopy').receiveShadow = true;
+scene.add(makeGrassTufts({ inner: CUP.r + 1.8, outer: MAP.groundR - 1, pathHalf: 2.4, count: LOW ? 1400 : 3200 }));
+const fx = makeParticles(LOW ? 600 : 900);
+scene.add(fx.points);
+const motes = makeMotes(LOW ? 90 : 180, CUP.r - 1, 6);
+scene.add(motes.points);
+const rings = makeRings(12);
+rings.meshes.forEach((m) => scene.add(m));
 const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 600);
+const post = makeComposer(renderer, scene, camera);
+const pointScale = () => (innerHeight * renderer.getPixelRatio()) / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // bouncers run on the clock; the player can bump into them or bounce off their heads
 const bound = [];
 for (const e of ANIMATIONS) { const o = root.getObjectByName(e.name); if (o) bound.push({ e, o }); }
-const bouncerList = bound.map((b, i) => ({ o: b.o, r: BOUNCERS[i].r, id: i, alive: true, deadAt: 0 }));
+const bouncerList = bound.map((b, i) => ({ o: b.o, r: BOUNCERS[i].r, id: i, alive: true, deadAt: 0, gold: false, goldUntil: 0 }));
+const BOBA_MAT = makeBobaMaterial(false), GOLD_MAT = makeBobaMaterial(true);
+BOBA_MAT.envMap = GOLD_MAT.envMap = ENV;
+for (const b of bouncerList) b.o.material = BOBA_MAT;
+function setGold(b, on, until = 0) { b.gold = on; b.goldUntil = until; b.o.material = on ? GOLD_MAT : BOBA_MAT; }
 // one landing pops a bouncer: it squashes flat and vanishes, then grows back a while later
 const POP_TIME = 0.32, RESPAWN = 15, GROW = 0.5;
 let gameClock = 0;
 const aliveBouncers = () => bouncerList.filter((b) => b.alive);
 function popBouncer(b) { b.alive = false; b.deadAt = gameClock; }
-function reviveAll() { for (const b of bouncerList) { b.alive = true; b.deadAt = -99; b.o.visible = true; } }
+function reviveAll() { for (const b of bouncerList) { b.alive = true; b.deadAt = -99; b.o.visible = true; setGold(b, false); } }
 // runs after the driver each frame: layers the pop / regrow on top of the normal hop
 function applyLife() {
   for (const b of bouncerList) {
     const since = gameClock - b.deadAt;
     if (!b.alive) {
       if (since < POP_TIME) { const k = since / POP_TIME; b.o.scale.set(b.o.scale.x * (1 + 0.9 * k), b.o.scale.y * (1 - 0.85 * k), b.o.scale.z * (1 + 0.9 * k)); b.o.visible = true; }
-      else b.o.visible = false;
+      else { b.o.visible = false; if (b.gold) setGold(b, false); }
       if (since > RESPAWN) b.alive = true;
     } else if (since > RESPAWN && since < RESPAWN + GROW) {
       const k = (since - RESPAWN) / GROW, g = Math.max(0.001, k * k * (3 - 2 * k) * (1 + 0.25 * Math.sin(k * Math.PI)));
       b.o.visible = true; b.o.scale.multiplyScalar(g);
     } else b.o.visible = true;
+    if (b.gold && b.alive) {
+      if (gameClock > b.goldUntil) setGold(b, false);
+      else b.o.scale.multiplyScalar(1.12 + 0.05 * Math.sin(gameClock * 10));     // golden ones are a touch bigger and pulse
+    }
   }
 }
 
@@ -843,28 +869,20 @@ function placeBlob(i, x, z, height, size) {
 const ROUND = 120;                         // seconds
 const START = { x: 0, z: 0, yaw: Math.PI };   // centre of the pit
 let state = 'menu';                        // menu -> countdown -> play -> over
+const FEVER_AT = 20;                       // the last 20 seconds score double
+const COMBO_CAP = 10;                      // a chain bounce is worth its combo number, up to this
+const GOLD_POINTS = 10, GOLD_LIFE = 8;
 let score = 0, timeLeft = ROUND, countdown = 0, best = 0;
-try { best = parseInt(localStorage.getItem('bobaBounceBest') || '0', 10) || 0; } catch (e) {}
+let combo = 0, maxCombo = 0, fever = false, feverAmt = 0, nextGold = 0, fovKick = 0, shake = 0;
+try { best = parseInt(localStorage.getItem('bobaBounceBest2') || '0', 10) || 0; } catch (e) {}
 const $ = (id) => document.getElementById(id);
-const ui = { tip: $('tip'), menu: $('menu'), over: $('over'), hud: $('hud'), time: $('time'), score: $('score'), count: $('count'), final: $('final'), best: $('best'), menuBest: $('menuBest'), pops: $('pops'), newBest: $('newBest') };
+const ui = { tip: $('tip'), menu: $('menu'), over: $('over'), hud: $('hud'), time: $('time'), score: $('score'), count: $('count'), final: $('final'), best: $('best'), menuBest: $('menuBest'), pops: $('pops'), newBest: $('newBest'), combo: $('combo'), comboN: $('comboN'), fever: $('fever'), mute: $('mute'), maxCombo: $('maxCombo') };
 const show = (el, on) => el.classList.toggle('hidden', !on);
 function refreshMenuBest() { ui.menuBest.textContent = best ? `Best: ${best}` : ''; }
 refreshMenuBest();
 
-// ---------------------------------------------------------------- little sounds (made on the fly, no files)
-let actx = null;
-function sound(kind) {
-  try {
-    actx ??= new (window.AudioContext || window.webkitAudioContext)();
-    const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
-    o.connect(g); g.connect(actx.destination);
-    if (kind === 'boing') { o.type = 'sine'; o.frequency.setValueAtTime(260, t); o.frequency.exponentialRampToValueAtTime(720, t + 0.12); g.gain.setValueAtTime(0.22, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.22); o.start(t); o.stop(t + 0.24); }
-    else if (kind === 'tick') { o.type = 'triangle'; o.frequency.setValueAtTime(880, t); g.gain.setValueAtTime(0.12, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.09); o.start(t); o.stop(t + 0.1); }
-    else if (kind === 'go') { o.type = 'triangle'; o.frequency.setValueAtTime(660, t); o.frequency.setValueAtTime(990, t + 0.1); g.gain.setValueAtTime(0.16, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.35); o.start(t); o.stop(t + 0.36); }
-    else if (kind === 'pop') { o.type = 'square'; o.frequency.setValueAtTime(1400, t); o.frequency.exponentialRampToValueAtTime(300, t + 0.06); g.gain.setValueAtTime(0.06, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.07); o.start(t); o.stop(t + 0.08); }
-    else if (kind === 'end') { o.type = 'triangle'; o.frequency.setValueAtTime(660, t); o.frequency.exponentialRampToValueAtTime(220, t + 0.6); g.gain.setValueAtTime(0.16, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.65); o.start(t); o.stop(t + 0.66); }
-  } catch (e) {}
-}
+// ---------------------------------------------------------------- sounds live in audio.js
+const sound = (kind, combo) => sfx(kind, combo);
 
 // ---------------------------------------------------------------- 2D boba bouncers for the menus
 function fillBobas(el, n, seed) {
@@ -891,6 +909,8 @@ function startGame() {
   reviveAll();
   camYaw = 0; camPitch = 0.42; camDistGoal = 3.6;
   score = 0; timeLeft = ROUND; countdown = 3; lastCount = 0; ui.count.textContent = '';
+  combo = 0; maxCombo = 0; fever = false; nextGold = ROUND - 5; setFever(false); show(ui.combo, false); show(ui.fever, false);
+  document.body.classList.remove('fever'); startMusic();
   ui.score.textContent = '0'; ui.time.textContent = fmt(ROUND); ui.time.classList.remove('low');
   show(ui.menu, false); show(ui.over, false); show(ui.hud, true); show(ui.count, true); show(ui.tip, true);
   document.body.classList.add('playing');
@@ -898,10 +918,12 @@ function startGame() {
 }
 function endGame() {
   show(ui.tip, false);
-  state = 'over'; player.enabled = false; sound('end');
+  state = 'over'; player.enabled = false; sound('end'); stopMusic(); setFever(false);
+  fever = false; document.body.classList.remove('fever'); show(ui.fever, false); show(ui.combo, false);
   const isBest = score > best;
-  if (isBest) { best = score; try { localStorage.setItem('bobaBounceBest', String(best)); } catch (e) {} }
+  if (isBest) { best = score; try { localStorage.setItem('bobaBounceBest2', String(best)); } catch (e) {} }
   ui.final.textContent = score; ui.best.textContent = `Best: ${best}`; show(ui.newBest, isBest && score > 0);
+  ui.maxCombo.textContent = maxCombo > 1 ? `Longest chain: x${maxCombo}` : '';
   show(ui.over, true); show(ui.hud, false); document.body.classList.remove('playing');
 }
 $('play').onclick = () => startGame();
@@ -914,17 +936,48 @@ addEventListener('keydown', (e) => {
 const fmt = (s) => { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 let lastCount = 4;
 
-function scorePop(bi) {
-  score++; ui.score.textContent = score; sound('boing'); sound('pop');
-  popBouncer(bouncerList[bi]);
-  ui.score.parentElement.classList.remove('bump'); void ui.score.parentElement.offsetWidth; ui.score.parentElement.classList.add('bump');
-  // "+1" floats up from the bouncer you landed on
-  const o = bouncerList[bi].o.position, v = new THREE.Vector3(o.x, o.y + 1.1, o.z).project(camera);
+function floatText(x, y, z, text, cls = '') {
+  const v = new THREE.Vector3(x, y, z).project(camera);
   if (v.z > 1) return;
-  const el = document.createElement('div'); el.className = 'pop'; el.textContent = '+1';
+  const el = document.createElement('div'); el.className = 'pop ' + cls; el.textContent = text;
   el.style.left = `${(v.x * 0.5 + 0.5) * innerWidth}px`; el.style.top = `${(-v.y * 0.5 + 0.5) * innerHeight}px`;
-  ui.pops.appendChild(el); setTimeout(() => el.remove(), 900);
+  ui.pops.appendChild(el); setTimeout(() => el.remove(), 1000);
 }
+function scorePop(bi) {
+  const b = bouncerList[bi], o = b.o.position, gold = b.gold;
+  combo++; maxCombo = Math.max(maxCombo, combo);
+  const mult = fever ? 2 : 1, pts = (Math.min(combo, COMBO_CAP) + (gold ? GOLD_POINTS : 0)) * mult;
+  score += pts; ui.score.textContent = score;
+  sound('boing', combo); if (gold) sound('gold');
+  popBouncer(b);
+  ui.score.parentElement.classList.remove('bump'); void ui.score.parentElement.offsetWidth; ui.score.parentElement.classList.add('bump');
+  const top = o.y + b.r * 1.6;
+  fx.burst(o.x, top, o.z, { gold, combo });
+  rings.spawn(o.x, CUP.floor + 0.03, o.z, b.r * (gold ? 4.5 : 2.6), gold);
+  fovKick = Math.min(9, fovKick + 2.5 + Math.min(combo, 8) * 0.4); if (gold) shake = 0.25;
+  floatText(o.x, o.y + 1.1, o.z, `+${pts}`, gold ? 'gold' : combo >= 5 ? 'hot' : '');
+  if (combo >= 2) {
+    ui.comboN.textContent = `x${combo}`; show(ui.combo, true);
+    ui.combo.classList.toggle('hot', combo >= 5);
+    ui.combo.classList.remove('bump'); void ui.combo.offsetWidth; ui.combo.classList.add('bump');
+  }
+}
+function breakCombo() {
+  if (combo >= 3) { sound('break'); const P = player.P; floatText(P.x, P.y + 1.4, P.z, combo >= 8 ? 'AMAZING!' : combo >= 5 ? 'GREAT!' : 'NICE!', 'word'); }
+  combo = 0; show(ui.combo, false);
+}
+function spawnGold() {
+  const pool = bouncerList.filter((b) => b.alive && !b.gold);
+  if (bouncerList.filter((b) => b.gold).length >= 2 || !pool.length) return;
+  setGold(pool[Math.floor(Math.random() * pool.length)], true, gameClock + GOLD_LIFE);
+}
+function startFever() {
+  fever = true; setFever(true); sound('fever');
+  show(ui.fever, true); document.body.classList.add('fever');
+}
+ui.mute.onclick = (e) => { e.currentTarget.blur(); ui.mute.classList.toggle('off', toggleMute()); };
+ui.mute.classList.toggle('off', isMuted());
+addEventListener('keydown', (e) => { if (e.code === 'KeyM') ui.mute.classList.toggle('off', toggleMute()); });
 
 // emotes on the number keys while playing
 addEventListener('keydown', (e) => {
@@ -992,12 +1045,22 @@ function frame() {
   } else if (state === 'play') {
     timeLeft -= realDt;
     ui.time.textContent = fmt(timeLeft);
+    if (!fever && timeLeft <= FEVER_AT) startFever();
+    if (timeLeft <= nextGold) { spawnGold(); nextGold = timeLeft - (fever ? 3.5 : 6 + Math.random() * 3); }
     ui.time.classList.toggle('low', timeLeft <= 10);
     if (timeLeft <= 0) endGame();
   }
 
   const P = player.step(dt, camYaw, joy);
   if (state === 'play' && P.bounced >= 0) scorePop(P.bounced);
+  else if (state === 'play' && combo > 0 && P.grounded) breakCombo();
+  // effects clock and fever look
+  U.uTime.value = t;
+  feverAmt += ((fever ? 1 : 0) - feverAmt) * (1 - Math.exp(-2 * realDt));
+  U.uFever.value = feverAmt;
+  post.bloom.strength = 0.4 + feverAmt * 0.3;
+  fx.update(realDt); rings.update(realDt);
+  fx.mat.uniforms.uScale.value = motes.mat.uniforms.uScale.value = pointScale();
   bouncerList.forEach((b, i) => { const o = b.o.position; placeBlob(i, o.x, o.z, o.y - CUP.floor, b.o.visible ? b.r * 2.4 * Math.min(1, b.o.scale.x) : 0); });
   placeBlob(bouncerList.length, P.x, P.z, P.y - groundAt(P.x, P.z) + 0.012, 0.62);
   blobs.instanceMatrix.needsUpdate = true;
@@ -1014,8 +1077,13 @@ function frame() {
     camLook.lerp(new THREE.Vector3(P.x, P.y + 0.45, P.z), 1 - Math.exp(-12 * dt));
   }
   camera.position.copy(camPos); camera.lookAt(camLook);
-  renderer.render(scene, camera);
+  // bounce punch: a quick widen of the lens that settles back, plus a little shake on gold
+  fovKick *= Math.exp(-6 * realDt); shake = Math.max(0, shake - realDt);
+  const fov = 50 + (REDUCED_MOTION ? 0 : fovKick) + feverAmt * 3;
+  if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+  if (shake > 0 && !REDUCED_MOTION) camera.position.add(new THREE.Vector3((Math.random() - 0.5) * shake * 0.4, (Math.random() - 0.5) * shake * 0.4, 0).applyQuaternion(camera.quaternion));
+  post.composer.render(realDt);
   requestAnimationFrame(frame);
 }
 frame();
-addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); post.resize(); });
