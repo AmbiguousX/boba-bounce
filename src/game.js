@@ -896,7 +896,7 @@ function fillBobas(el, n, seed) {
   }
 }
 { const fit = Math.max(4, Math.min(7, Math.floor((Math.min(innerWidth, 440) - 60) / 52))); fillBobas($('menuBobas'), fit, 1); fillBobas($('overBobas'), Math.min(5, fit), 7); }
-$('controls').textContent = matchMedia('(pointer: coarse)').matches ? 'Joystick to run · JUMP to hop · land on boba to score' : 'WASD to run · Space to jump · land on boba to score';
+$('controls').textContent = matchMedia('(pointer: coarse)').matches ? 'Drag anywhere to run · JUMP or a second finger to hop' : 'WASD to run · Space to jump · land on boba to score';
 
 // ---------------------------------------------------------------- flow
 function toMenu() {
@@ -905,9 +905,8 @@ function toMenu() {
   refreshMenuBest();
 }
 function startGame() {
-  player.reset(START.x, START.z, START.yaw);
+  player.reset(START.x, START.z, START.yaw); camFollowY = 0;
   reviveAll();
-  camYaw = 0; camPitch = 0.42; camDistGoal = 3.6;
   score = 0; timeLeft = ROUND; countdown = 3; lastCount = 0; ui.count.textContent = '';
   combo = 0; maxCombo = 0; fever = false; nextGold = ROUND - 5; setFever(false); show(ui.combo, false); show(ui.fever, false);
   document.body.classList.remove('fever'); startMusic();
@@ -991,39 +990,44 @@ const touch = matchMedia('(pointer: coarse)').matches;
 const joy = { x: 0, z: 0, jump: false, held: false };
 if (touch) {
   document.body.classList.add('touch');
-  const pad = $('pad'), knob = $('knob');
+  // floating joystick: the first finger down anywhere (outside a button) becomes the stick, centred
+  // where it landed. A second finger anywhere jumps, as does the JUMP button.
+  const pad = $('pad'), knob = $('knob'), R = 45;
   let id = null, cx = 0, cy = 0;
-  const move = (e) => { if (e.pointerId !== id) return; let dx = (e.clientX - cx) / 45, dy = (e.clientY - cy) / 45; const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; } joy.x = dx; joy.z = dy; knob.style.transform = `translate(${dx * 32}px, ${dy * 32}px)`; };
-  pad.addEventListener('pointerdown', (e) => { id = e.pointerId; const r = pad.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2; pad.setPointerCapture(id); move(e); });
-  pad.addEventListener('pointermove', move);
-  const end = (e) => { if (e.pointerId !== id) return; id = null; joy.x = joy.z = 0; knob.style.transform = ''; };
-  pad.addEventListener('pointerup', end); pad.addEventListener('pointercancel', end);
+  const jumpIds = new Set();
+  const move = (e) => {
+    if (e.pointerId !== id) return;
+    let dx = (e.clientX - cx) / R, dy = (e.clientY - cy) / R;
+    const l = Math.hypot(dx, dy);
+    if (l > 1) { cx += (e.clientX - cx) * (1 - 1 / l); cy += (e.clientY - cy) * (1 - 1 / l); dx /= l; dy /= l; placePad(); }   // drag past the edge and the stick follows the finger
+    joy.x = dx; joy.z = dy; knob.style.transform = `translate(${dx * 32}px, ${dy * 32}px)`;
+  };
+  const placePad = () => { pad.style.left = `${cx - 55}px`; pad.style.top = `${cy - 55}px`; pad.style.bottom = 'auto'; };
+  addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' || !document.body.classList.contains('playing') || e.target.closest('button')) return;
+    e.preventDefault();
+    if (id === null) { id = e.pointerId; cx = e.clientX; cy = e.clientY; placePad(); pad.classList.add('active'); move(e); }
+    else { jumpIds.add(e.pointerId); joy.jump = true; joy.held = true; }
+  }, { passive: false });
+  addEventListener('pointermove', move);
+  const end = (e) => {
+    if (jumpIds.delete(e.pointerId)) { if (!jumpIds.size) joy.held = false; return; }
+    if (e.pointerId !== id) return;
+    id = null; joy.x = joy.z = 0; knob.style.transform = '';
+    pad.classList.remove('active'); pad.style.left = pad.style.top = pad.style.bottom = '';
+  };
+  addEventListener('pointerup', end); addEventListener('pointercancel', end);
   const jb = $('jump');
   jb.addEventListener('pointerdown', (e) => { joy.jump = true; joy.held = true; jb.setPointerCapture(e.pointerId); e.preventDefault(); });
   for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) jb.addEventListener(ev, () => { joy.held = false; });
 }
 
-// ---------------------------------------------------------------- camera: drag to look, wheel / pinch to zoom
-let camYaw = 0, camPitch = 0.42, camDist = 3.6, camDistGoal = 3.6, lastX = 0, lastY = 0;
-const ZOOM = { min: 1.6, max: 10 };
-const touches = new Map();
-let pinchStart = 0, pinchDist0 = 0;
-const canvas = renderer.domElement;
-canvas.addEventListener('pointerdown', (e) => {
-  touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  lastX = e.clientX; lastY = e.clientY;
-  if (touches.size === 2) { const [a, b] = [...touches.values()]; pinchStart = Math.hypot(a.x - b.x, a.y - b.y); pinchDist0 = camDistGoal; }
-});
-addEventListener('pointermove', (e) => {
-  if (!touches.has(e.pointerId)) return;
-  touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (touches.size >= 2) { const [a, b] = [...touches.values()], d = Math.hypot(a.x - b.x, a.y - b.y); if (pinchStart > 10) camDistGoal = clamp(pinchDist0 * (pinchStart / d), ZOOM.min, ZOOM.max); return; }
-  camYaw -= (e.clientX - lastX) * 0.006; camPitch = clamp(camPitch + (e.clientY - lastY) * 0.004, 0.12, 1.2);
-  lastX = e.clientX; lastY = e.clientY;
-});
-const lift = (e) => { if (!touches.delete(e.pointerId)) return; if (touches.size === 1) { const [a] = [...touches.values()]; lastX = a.x; lastY = a.y; } };
-addEventListener('pointerup', lift); addEventListener('pointercancel', lift);
-canvas.addEventListener('wheel', (e) => { e.preventDefault(); camDistGoal = clamp(camDistGoal * Math.exp(e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0015)), ZOOM.min, ZOOM.max); }, { passive: false });
+// ---------------------------------------------------------------- camera: fixed angle above and behind, follows the player
+// One view for the whole round: up on the stick is always up the screen, and the higher angle
+// makes it easy to judge where you will land on a boba.
+const CAM = { yaw: 0, pitch: 0.78, dist: 8 };
+const camYaw = CAM.yaw;
+let camFollowY = 0;                          // eased player height so the view doesn't bob with every bounce
 
 // ---------------------------------------------------------------- loop
 let last = performance.now();
@@ -1071,10 +1075,11 @@ function frame() {
     camPos.lerp(new THREE.Vector3(Math.sin(a) * 30, 15, Math.cos(a) * 30), 1 - Math.exp(-2 * dt));
     camLook.lerp(new THREE.Vector3(0, 1.5, 0), 1 - Math.exp(-2 * dt));
   } else {
-    camDist += (camDistGoal - camDist) * (1 - Math.exp(-10 * dt));
-    const want = new THREE.Vector3(P.x + Math.sin(camYaw) * Math.cos(camPitch) * camDist, P.y + 0.5 + Math.sin(camPitch) * camDist, P.z + Math.cos(camYaw) * Math.cos(camPitch) * camDist);
-    camPos.lerp(want, 1 - Math.exp(-(state === 'countdown' ? 4 : 8) * dt));
-    camLook.lerp(new THREE.Vector3(P.x, P.y + 0.45, P.z), 1 - Math.exp(-12 * dt));
+    camFollowY += (P.y - camFollowY) * (1 - Math.exp(-2.5 * dt));
+    const h = Math.cos(CAM.pitch) * CAM.dist;
+    const want = new THREE.Vector3(P.x + Math.sin(CAM.yaw) * h, camFollowY + 0.5 + Math.sin(CAM.pitch) * CAM.dist, P.z + Math.cos(CAM.yaw) * h);
+    camPos.lerp(want, 1 - Math.exp(-(state === 'countdown' ? 3 : 7) * dt));
+    camLook.lerp(new THREE.Vector3(P.x, camFollowY + 0.6, P.z), 1 - Math.exp(-9 * dt));
   }
   camera.position.copy(camPos); camera.lookAt(camLook);
   // bounce punch: a quick widen of the lens that settles back, plus a little shake on gold
