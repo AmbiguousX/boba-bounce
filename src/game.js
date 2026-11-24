@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { U, LOW, FOG_COLOR, makeSky, makeEnvironment, makeBobaMaterial, makeTeaMaterial, makeGrassGroundMaterial, makeGlassMaterial,
   addWind, makeGrassTufts, makeParticles, makeMotes, makeRings, makeComposer } from './fx.js';
-import { makeJack } from './jack.js';
 import { sfx, startMusic, stopMusic, setFever, toggleMute, isMuted } from './audio.js';
 
 // ================================================================ ANIMATIONS (same code as boba-bounce.animations.js)
@@ -661,23 +660,8 @@ function chibiWearables() {
 }
 
 // ---------------------------------------------------------------- player controller (stand-in for your engine's capsule movement)
-// the player's body: Flappy Jack, or the chibi if his file can't load
-function makeBody() {
-  const holder = new THREE.Group();
-  let body;
-  const jack = makeJack({ onFail: () => { holder.remove(jack.root); body = makeChibi(); body.isChibi = true; holder.add(body.root); body.root.traverse((m) => { m.castShadow = false; }); } });
-  body = jack; holder.add(jack.root);
-  return {
-    root: holder,
-    animate(dt, s) { if (body.isChibi) body.root.rotation.y = s.heading; body.animate(dt, s); },
-    emote: (n) => body.emote(n),
-    get emotes() { return body.emotes; },
-  };
-}
-const BODY_R = 0.36;                 // his stack is wider than the chibi was
-
 function makePlayer(scene, getBouncers) {
-  const chibi = makeBody();
+  const chibi = makeChibi();
   scene.add(chibi.root);
   // the physics capsule (hidden) — this is what your engine already moves and syncs
   const capsule = new THREE.Mesh(new THREE.CapsuleGeometry(CHIBI.capR, CHIBI.capLen, 4, 8), new THREE.MeshBasicMaterial({ color: '#6366f1', wireframe: true }));
@@ -723,14 +707,14 @@ function makePlayer(scene, getBouncers) {
 
     // cup wall (glass) with a doorway at the front
     let d = Math.hypot(P.x, P.z);
-    const a = Math.atan2(P.x, P.z), inDoor = Math.abs(a) < CUP.door - BODY_R / CUP.r && P.y < CUP.doorH - 0.8;
+    const a = Math.atan2(P.x, P.z), inDoor = Math.abs(a) < CUP.door - CHIBI.capR / CUP.r && P.y < CUP.doorH - 0.8;
     const rW = cupInner(P.y);
     if (!inDoor && P.y < CUP.h + 0.1) {
-      if (prevD < rW && d > rW - BODY_R) { P.x *= (rW - BODY_R) / d; P.z *= (rW - BODY_R) / d; }
-      else if (prevD >= rW && d < rW + BODY_R) { P.x *= (rW + BODY_R) / d; P.z *= (rW + BODY_R) / d; }
+      if (prevD < rW && d > rW - CHIBI.capR) { P.x *= (rW - CHIBI.capR) / d; P.z *= (rW - CHIBI.capR) / d; }
+      else if (prevD >= rW && d < rW + CHIBI.capR) { P.x *= (rW + CHIBI.capR) / d; P.z *= (rW + CHIBI.capR) / d; }
     }
     d = Math.hypot(P.x, P.z);
-    if (d > MAP.edgeR - BODY_R) { P.x *= (MAP.edgeR - BODY_R) / d; P.z *= (MAP.edgeR - BODY_R) / d; }
+    if (d > MAP.edgeR - CHIBI.capR) { P.x *= (MAP.edgeR - CHIBI.capR) / d; P.z *= (MAP.edgeR - CHIBI.capR) / d; }
 
     // floor
     const f = floorAt(P.x, P.z);
@@ -745,11 +729,11 @@ function makePlayer(scene, getBouncers) {
       bi++;
       const o = b.o, r = b.r * o.scale.x, top = o.position.y + 2 * b.r * 0.96 * o.scale.y;
       const dx = P.x - o.position.x, dz = P.z - o.position.z, dh = Math.hypot(dx, dz);
-      if (dh > r + BODY_R) continue;
-      if (P.vy <= 0 && P.y > top - 0.3 && P.y < top + 0.15 && dh < r * 0.95 + 0.08) {
+      if (dh > r + CHIBI.capR) continue;
+      if (P.vy <= 0 && P.y > top - 0.3 && P.y < top + 0.15 && dh < r * 0.95) {
         P.y = top; P.vy = 8.6; P.grounded = false; launched = true; P.bounced = b.id ?? bi;
       } else if (P.y < top - 0.3) {
-        const push = (r + BODY_R - dh) / (dh || 1);
+        const push = (r + CHIBI.capR - dh) / (dh || 1);
         P.x += dx * push; P.z += dz * push;
       }
     }
@@ -763,7 +747,8 @@ function makePlayer(scene, getBouncers) {
     }
     capsule.position.set(P.x, P.y + CHIBI.capR + CHIBI.capLen / 2, P.z);
     chibi.root.position.set(P.x, P.y, P.z);
-    chibi.animate(dt, { speed: hs, grounded: P.grounded, vy: P.vy, heading: P.yaw, landed: (P.grounded && !P.wasGrounded) || launched });
+    chibi.root.rotation.set(0, P.yaw, 0);
+    chibi.animate(dt, { speed: hs, grounded: P.grounded, vy: P.vy, landed: (P.grounded && !P.wasGrounded) || launched });
     return P;
   }
   function reset(x, z, yaw) {
@@ -911,7 +896,7 @@ function fillBobas(el, n, seed) {
   }
 }
 { const fit = Math.max(4, Math.min(7, Math.floor((Math.min(innerWidth, 440) - 60) / 52))); fillBobas($('menuBobas'), fit, 1); fillBobas($('overBobas'), Math.min(5, fit), 7); }
-$('controls').textContent = matchMedia('(pointer: coarse)').matches ? 'Drag anywhere to run · JUMP or a second finger to hop' : 'WASD to run · Space to jump · 1–8 for Jack’s faces';
+$('controls').textContent = matchMedia('(pointer: coarse)').matches ? 'Joystick to run · JUMP to hop · land on boba to score' : 'WASD to run · Space to jump · land on boba to score';
 
 // ---------------------------------------------------------------- flow
 function toMenu() {
@@ -920,8 +905,9 @@ function toMenu() {
   refreshMenuBest();
 }
 function startGame() {
-  player.reset(START.x, START.z, START.yaw); camFollowY = 0;
+  player.reset(START.x, START.z, START.yaw);
   reviveAll();
+  camYaw = 0; camPitch = 0.55; camDistGoal = 6.5;
   score = 0; timeLeft = ROUND; countdown = 3; lastCount = 0; ui.count.textContent = '';
   combo = 0; maxCombo = 0; fever = false; nextGold = ROUND - 5; setFever(false); show(ui.combo, false); show(ui.fever, false);
   document.body.classList.remove('fever'); startMusic();
@@ -937,7 +923,6 @@ function endGame() {
   const isBest = score > best;
   if (isBest) { best = score; try { localStorage.setItem('bobaBounceBest2', String(best)); } catch (e) {} }
   ui.final.textContent = score; ui.best.textContent = `Best: ${best}`; show(ui.newBest, isBest && score > 0);
-  player.chibi.emote(isBest && score > 0 ? 'Bliss' : 'Raspberry');
   ui.maxCombo.textContent = maxCombo > 1 ? `Longest chain: x${maxCombo}` : '';
   show(ui.over, true); show(ui.hud, false); document.body.classList.remove('playing');
 }
@@ -964,7 +949,6 @@ function scorePop(bi) {
   const mult = fever ? 2 : 1, pts = (Math.min(combo, COMBO_CAP) + (gold ? GOLD_POINTS : 0)) * mult;
   score += pts; ui.score.textContent = score;
   sound('boing', combo); if (gold) sound('gold');
-  if (gold) player.chibi.emote('LickLips'); else if (combo === 5 || combo === 10 || combo === 20) player.chibi.emote('Cackle');
   popBouncer(b);
   ui.score.parentElement.classList.remove('bump'); void ui.score.parentElement.offsetWidth; ui.score.parentElement.classList.add('bump');
   const top = o.y + b.r * 1.6;
@@ -979,7 +963,6 @@ function scorePop(bi) {
   }
 }
 function breakCombo() {
-  if (combo >= 5) player.chibi.emote('UhOh');
   if (combo >= 3) { sound('break'); const P = player.P; floatText(P.x, P.y + 1.4, P.z, combo >= 8 ? 'AMAZING!' : combo >= 5 ? 'GREAT!' : 'NICE!', 'word'); }
   combo = 0; show(ui.combo, false);
 }
@@ -989,7 +972,7 @@ function spawnGold() {
   setGold(pool[Math.floor(Math.random() * pool.length)], true, gameClock + GOLD_LIFE);
 }
 function startFever() {
-  fever = true; setFever(true); sound('fever'); player.chibi.emote('Scream');
+  fever = true; setFever(true); sound('fever');
   show(ui.fever, true); document.body.classList.add('fever');
 }
 ui.mute.onclick = (e) => { e.currentTarget.blur(); ui.mute.classList.toggle('off', toggleMute()); };
@@ -1008,44 +991,39 @@ const touch = matchMedia('(pointer: coarse)').matches;
 const joy = { x: 0, z: 0, jump: false, held: false };
 if (touch) {
   document.body.classList.add('touch');
-  // floating joystick: the first finger down anywhere (outside a button) becomes the stick, centred
-  // where it landed. A second finger anywhere jumps, as does the JUMP button.
-  const pad = $('pad'), knob = $('knob'), R = 45;
+  const pad = $('pad'), knob = $('knob');
   let id = null, cx = 0, cy = 0;
-  const jumpIds = new Set();
-  const move = (e) => {
-    if (e.pointerId !== id) return;
-    let dx = (e.clientX - cx) / R, dy = (e.clientY - cy) / R;
-    const l = Math.hypot(dx, dy);
-    if (l > 1) { cx += (e.clientX - cx) * (1 - 1 / l); cy += (e.clientY - cy) * (1 - 1 / l); dx /= l; dy /= l; placePad(); }   // drag past the edge and the stick follows the finger
-    joy.x = dx; joy.z = dy; knob.style.transform = `translate(${dx * 32}px, ${dy * 32}px)`;
-  };
-  const placePad = () => { pad.style.left = `${cx - 55}px`; pad.style.top = `${cy - 55}px`; pad.style.bottom = 'auto'; };
-  addEventListener('pointerdown', (e) => {
-    if (e.pointerType === 'mouse' || !document.body.classList.contains('playing') || e.target.closest('button')) return;
-    e.preventDefault();
-    if (id === null) { id = e.pointerId; cx = e.clientX; cy = e.clientY; placePad(); pad.classList.add('active'); move(e); }
-    else { jumpIds.add(e.pointerId); joy.jump = true; joy.held = true; }
-  }, { passive: false });
-  addEventListener('pointermove', move);
-  const end = (e) => {
-    if (jumpIds.delete(e.pointerId)) { if (!jumpIds.size) joy.held = false; return; }
-    if (e.pointerId !== id) return;
-    id = null; joy.x = joy.z = 0; knob.style.transform = '';
-    pad.classList.remove('active'); pad.style.left = pad.style.top = pad.style.bottom = '';
-  };
-  addEventListener('pointerup', end); addEventListener('pointercancel', end);
+  const move = (e) => { if (e.pointerId !== id) return; let dx = (e.clientX - cx) / 45, dy = (e.clientY - cy) / 45; const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; } joy.x = dx; joy.z = dy; knob.style.transform = `translate(${dx * 32}px, ${dy * 32}px)`; };
+  pad.addEventListener('pointerdown', (e) => { id = e.pointerId; const r = pad.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2; pad.setPointerCapture(id); move(e); });
+  pad.addEventListener('pointermove', move);
+  const end = (e) => { if (e.pointerId !== id) return; id = null; joy.x = joy.z = 0; knob.style.transform = ''; };
+  pad.addEventListener('pointerup', end); pad.addEventListener('pointercancel', end);
   const jb = $('jump');
   jb.addEventListener('pointerdown', (e) => { joy.jump = true; joy.held = true; jb.setPointerCapture(e.pointerId); e.preventDefault(); });
   for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) jb.addEventListener(ev, () => { joy.held = false; });
 }
 
-// ---------------------------------------------------------------- camera: fixed angle above and behind, follows the player
-// One view for the whole round: up on the stick is always up the screen, and the higher angle
-// makes it easy to judge where you will land on a boba.
-const CAM = { yaw: 0, pitch: 0.62, dist: 7.2 };
-const camYaw = CAM.yaw;
-let camFollowY = 0;                          // eased player height so the view doesn't bob with every bounce
+// ---------------------------------------------------------------- camera: drag to look, wheel / pinch to zoom
+let camYaw = 0, camPitch = 0.55, camDist = 6.5, camDistGoal = 6.5, lastX = 0, lastY = 0;
+const ZOOM = { min: 1.6, max: 14 };
+const touches = new Map();
+let pinchStart = 0, pinchDist0 = 0;
+const canvas = renderer.domElement;
+canvas.addEventListener('pointerdown', (e) => {
+  touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  lastX = e.clientX; lastY = e.clientY;
+  if (touches.size === 2) { const [a, b] = [...touches.values()]; pinchStart = Math.hypot(a.x - b.x, a.y - b.y); pinchDist0 = camDistGoal; }
+});
+addEventListener('pointermove', (e) => {
+  if (!touches.has(e.pointerId)) return;
+  touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (touches.size >= 2) { const [a, b] = [...touches.values()], d = Math.hypot(a.x - b.x, a.y - b.y); if (pinchStart > 10) camDistGoal = clamp(pinchDist0 * (pinchStart / d), ZOOM.min, ZOOM.max); return; }
+  camYaw -= (e.clientX - lastX) * 0.006; camPitch = clamp(camPitch + (e.clientY - lastY) * 0.004, 0.12, 1.2);
+  lastX = e.clientX; lastY = e.clientY;
+});
+const lift = (e) => { if (!touches.delete(e.pointerId)) return; if (touches.size === 1) { const [a] = [...touches.values()]; lastX = a.x; lastY = a.y; } };
+addEventListener('pointerup', lift); addEventListener('pointercancel', lift);
+canvas.addEventListener('wheel', (e) => { e.preventDefault(); camDistGoal = clamp(camDistGoal * Math.exp(e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0015)), ZOOM.min, ZOOM.max); }, { passive: false });
 
 // ---------------------------------------------------------------- loop
 let last = performance.now();
@@ -1084,7 +1062,7 @@ function frame() {
   fx.update(realDt); rings.update(realDt);
   fx.mat.uniforms.uScale.value = motes.mat.uniforms.uScale.value = pointScale();
   bouncerList.forEach((b, i) => { const o = b.o.position; placeBlob(i, o.x, o.z, o.y - CUP.floor, b.o.visible ? b.r * 2.4 * Math.min(1, b.o.scale.x) : 0); });
-  placeBlob(bouncerList.length, P.x, P.z, P.y - groundAt(P.x, P.z) + 0.012, 1.2);
+  placeBlob(bouncerList.length, P.x, P.z, P.y - groundAt(P.x, P.z) + 0.012, 0.62);
   blobs.instanceMatrix.needsUpdate = true;
 
   if (state === 'menu') {
@@ -1093,11 +1071,10 @@ function frame() {
     camPos.lerp(new THREE.Vector3(Math.sin(a) * 30, 15, Math.cos(a) * 30), 1 - Math.exp(-2 * dt));
     camLook.lerp(new THREE.Vector3(0, 1.5, 0), 1 - Math.exp(-2 * dt));
   } else {
-    camFollowY += (P.y - camFollowY) * (1 - Math.exp(-2.5 * dt));
-    const h = Math.cos(CAM.pitch) * CAM.dist;
-    const want = new THREE.Vector3(P.x + Math.sin(CAM.yaw) * h, camFollowY + 0.5 + Math.sin(CAM.pitch) * CAM.dist, P.z + Math.cos(CAM.yaw) * h);
-    camPos.lerp(want, 1 - Math.exp(-(state === 'countdown' ? 3 : 7) * dt));
-    camLook.lerp(new THREE.Vector3(P.x, camFollowY + 0.6, P.z), 1 - Math.exp(-9 * dt));
+    camDist += (camDistGoal - camDist) * (1 - Math.exp(-10 * dt));
+    const want = new THREE.Vector3(P.x + Math.sin(camYaw) * Math.cos(camPitch) * camDist, P.y + 0.5 + Math.sin(camPitch) * camDist, P.z + Math.cos(camYaw) * Math.cos(camPitch) * camDist);
+    camPos.lerp(want, 1 - Math.exp(-(state === 'countdown' ? 4 : 8) * dt));
+    camLook.lerp(new THREE.Vector3(P.x, P.y + 0.45, P.z), 1 - Math.exp(-12 * dt));
   }
   camera.position.copy(camPos); camera.lookAt(camLook);
   // bounce punch: a quick widen of the lens that settles back, plus a little shake on gold

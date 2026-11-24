@@ -50,10 +50,7 @@ button{font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .pop{position:absolute;transform:translate(-50%,-50%);font-size:30px;font-weight:900;color:#fff;text-shadow:0 3px 0 var(--pink2),0 0 10px #ff6f9c;animation:rise .9s ease-out forwards}
 @keyframes rise{to{transform:translate(-50%,-160%) scale(1.3);opacity:0}}
 #pad,#jump{display:none}
-.touch.playing #pad{display:block;position:fixed;left:max(24px,env(safe-area-inset-left));bottom:max(28px,env(safe-area-inset-bottom));width:110px;height:110px;border-radius:50%;background:#ffffff55;border:2px solid #ffffffaa;pointer-events:none;opacity:.45;transition:opacity .15s}
-.touch.playing #pad.active{opacity:1;transition:none}
-.touch.playing canvas{touch-action:none}
-body.touch{touch-action:none;overscroll-behavior:none}
+.touch.playing #pad{display:block;position:fixed;left:max(24px,env(safe-area-inset-left));bottom:max(28px,env(safe-area-inset-bottom));width:110px;height:110px;border-radius:50%;background:#ffffff55;border:2px solid #ffffffaa;touch-action:none}
 #knob{position:absolute;left:35px;top:35px;width:40px;height:40px;border-radius:50%;background:#d93a52e6;pointer-events:none}
 .touch.playing #jump{display:block;position:fixed;right:max(28px,env(safe-area-inset-right));bottom:max(40px,env(safe-area-inset-bottom));width:84px;height:84px;border-radius:50%;border:0;background:#d93a52e6;color:#fff;font-size:15px;font-weight:900;touch-action:none}
 @media (prefers-reduced-motion: reduce){.bb,.badge,#time.low{animation:none}}
