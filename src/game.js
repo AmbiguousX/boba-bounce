@@ -468,7 +468,7 @@ function makeChibi(colors = {}, base = 'male') {
     // face: an emote's face first, then one the game is holding, then whatever he's doing
     heldT -= dt; if (heldT <= 0) heldFace = null;
     faceRig.face.expression = (st.emote && EMOTE_FACE[st.emote]) || heldFace
-      || (!s.grounded ? (s.vy > 1 ? 'joy' : s.vy < -16 ? 'surprised' : 'happy') : 'happy');
+      || (!s.grounded ? (s.vy > 1 ? 'joy' : s.vy < -9 ? 'surprised' : 'happy') : 'happy');
     faceRig.update(dt);
     // squash and stretch (constant volume)
     const sxz = 1 / Math.sqrt(P.sy);
@@ -703,13 +703,12 @@ function makePlayer(scene, getBouncers) {
     const speed = P.grounded ? 2.6 : 3.2, accel = P.grounded ? 14 : 10;   // more speed and steering in the air, to reach the next boba
     P.vx += (wx * speed - P.vx) * (1 - Math.exp(-accel * dt));
     P.vz += (wz * speed - P.vz) * (1 - Math.exp(-accel * dt));
-    if ((input.jump || joy.jump) && P.grounded) { P.vy = 13; P.grounded = false; }   // peak ~2.8: clears the highest any boba ever hops (~2.2), in about 0.43 s
+    if ((input.jump || joy.jump) && P.grounded) { P.vy = 8.2; P.grounded = false; }   // peak ~2.1 (was ~2.9): a lower, quicker hop
     input.jump = false; joy.jump = false;
     // Mario-style jump: hold for the full height, let go early for a short hop, and fall faster than you rise
     const held = enabled && (keys.has('Space') || joy.held);
-    const G = 30;                                    // strong gravity with a fast launch: snappy, not floaty
-    const grav = P.vy < 0 ? G * 1.6 : held ? G : G * 3;
-    P.vy = Math.max(-26, P.vy - grav * dt);
+    const grav = P.vy < 0 ? 16 * 1.75 : held ? 16 : 16 * 3.4;
+    P.vy = Math.max(-18, P.vy - grav * dt);
 
     const px = P.x, pz = P.z, py = P.y, prevD = Math.hypot(px, pz);
     P.x += P.vx * dt; P.z += P.vz * dt; P.y += P.vy * dt;
@@ -735,7 +734,7 @@ function makePlayer(scene, getBouncers) {
       let best = null, bd = 1e9;
       for (const b of getBouncers()) {
         const o = b.o, top = o.position.y + 2 * b.r * 0.96 * o.scale.y, dh = Math.hypot(P.x - o.position.x, P.z - o.position.z);
-        if (dh < b.r + 0.75 && P.y > top - 0.2 && P.y - top < 2.5 && dh < bd) { bd = dh; best = o; }
+        if (dh < b.r + 0.6 && P.y > top + 0.05 && P.y - top < 2 && dh < bd) { bd = dh; best = o; }
       }
       if (best) { const k = 1 - Math.exp(-6 * dt); P.x += (best.position.x - P.x) * k; P.z += (best.position.z - P.z) * k; }
     }
@@ -748,9 +747,9 @@ function makePlayer(scene, getBouncers) {
       const o = b.o, r = b.r * o.scale.x, top = o.position.y + 2 * b.r * 0.96 * o.scale.y;
       const dx = P.x - o.position.x, dz = P.z - o.position.z, dh = Math.hypot(dx, dz);
       if (dh > r + CHIBI.capR) continue;
-      if (P.vy <= 0 && (P.y > top - 0.55 || py >= top) && P.y < top + 0.25 && dh < r * 0.95 + 0.16) {   // forgiving: catch the edge, and fast falls never skip through
-        P.y = top; P.vy = 11.5; P.grounded = false; launched = true; P.bounced = b.id ?? bi;   // ~2.2 high, enough air to steer onto the next one
-      } else if (P.y < top - 0.55) {
+      if (P.vy < 0 && !P.wasGrounded && py >= top - 0.15 && P.y < top + 0.25 && dh < r * 0.95 + 0.12) {   // only coming down onto it from above (walking into one never counts); a little edge forgiveness
+        P.y = top; P.vy = 7.6; P.grounded = false; launched = true; P.bounced = b.id ?? bi;   // ~1.8 high (was ~2.3), still enough air to steer onto the next one
+      } else if (P.y < top - 0.3) {
         const push = (r + CHIBI.capR - dh) / (dh || 1);
         P.x += dx * push; P.z += dz * push;
       }
