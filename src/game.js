@@ -730,15 +730,6 @@ function makePlayer(scene, getBouncers) {
     P.wasGrounded = P.grounded;
     if (P.y <= f) { P.y = f; P.vy = 0; P.grounded = true; } else if (P.y > f + 0.02) P.grounded = false;
 
-    // landing help: falling toward a boba pulls you gently over its middle
-    if (P.vy < 0 && !P.grounded) {
-      let best = null, bd = 1e9;
-      for (const b of getBouncers()) {
-        const o = b.o, top = o.position.y + 2 * b.r * 0.96 * o.scale.y, dh = Math.hypot(P.x - o.position.x, P.z - o.position.z);
-        if (dh < b.r + 0.6 && P.y > top + 0.05 && P.y - top < 2 && dh < bd) { bd = dh; best = o; }
-      }
-      if (best) { const k = 1 - Math.exp(-6 * dt); P.x += (best.position.x - P.x) * k; P.z += (best.position.z - P.z) * k; }
-    }
     // bouncers: bump off their sides, and get launched if you land on top of one
     let launched = false;
     P.bounced = -1;
