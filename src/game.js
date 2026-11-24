@@ -3,7 +3,6 @@ import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js'
 import { U, LOW, FOG_COLOR, makeSky, makeEnvironment, makeBobaMaterial, makeTeaMaterial, makeGrassGroundMaterial, makeGlassMaterial,
   addWind, makeGrassTufts, makeParticles, makeMotes, makeRings, makeComposer } from './fx.js';
 import { makeMouth, makeFaceRig } from './face-rig.js';
-import { makeAmBigPlayer } from './ambig.js';
 import { sfx, startMusic, stopMusic, setFever, toggleMute, isMuted } from './audio.js';
 
 // ================================================================ ANIMATIONS (same code as boba-bounce.animations.js)
@@ -37,7 +36,7 @@ const BOUNCERS = CELLS.map((c, i) => ({
   c,
   r: 0.34 + hash(i) * 0.12,                    // body radius
   hop: 0.7 + hash(i + 50) * 0.45,              // seconds per hop
-  H: 0.45 + hash(i + 90) * 0.6,                // hop height
+  H: 0.35 + hash(i + 90) * 0.45,               // hop height (calmer: easier to land on)
   wander: 0.28 + hash(i + 130) * 0.22,         // loop radius inside the cell
   dir: hash(i + 170) < 0.5 ? -1 : 1,
   shape: hash(i + 210) * TAU,
@@ -469,7 +468,7 @@ function makeChibi(colors = {}, base = 'male') {
     // face: an emote's face first, then one the game is holding, then whatever he's doing
     heldT -= dt; if (heldT <= 0) heldFace = null;
     faceRig.face.expression = (st.emote && EMOTE_FACE[st.emote]) || heldFace
-      || (!s.grounded ? (s.vy > 1 ? 'joy' : s.vy < -7 ? 'surprised' : 'happy') : 'happy');
+      || (!s.grounded ? (s.vy > 1 ? 'joy' : s.vy < -16 ? 'surprised' : 'happy') : 'happy');
     faceRig.update(dt);
     // squash and stretch (constant volume)
     const sxz = 1 / Math.sqrt(P.sy);
@@ -670,7 +669,7 @@ function chibiWearables() {
 
 // ---------------------------------------------------------------- player controller (stand-in for your engine's capsule movement)
 function makePlayer(scene, getBouncers) {
-  const chibi = makeAmBigPlayer();   // AmBig (the old chibi, makeChibi, is still below if ever wanted)
+  const chibi = makeChibi({ body: '#8fc3f4', eye: '#111111' });   // the chibi in AmBig's colours (his tee, trim and shorts are the chibi's plain ones)
   scene.add(chibi.root);
   // the physics capsule (hidden) — this is what your engine already moves and syncs
   const capsule = new THREE.Mesh(new THREE.CapsuleGeometry(CHIBI.capR, CHIBI.capLen, 4, 8), new THREE.MeshBasicMaterial({ color: '#6366f1', wireframe: true }));
@@ -701,17 +700,18 @@ function makePlayer(scene, getBouncers) {
     if (il > 1) { ix /= il; iz /= il; }
     const c = Math.cos(camYaw), s = Math.sin(camYaw);
     const wx = ix * c + iz * s, wz = -ix * s + iz * c;
-    const speed = 2.4, accel = P.grounded ? 14 : 5;
+    const speed = P.grounded ? 2.6 : 3.2, accel = P.grounded ? 14 : 10;   // more speed and steering in the air, to reach the next boba
     P.vx += (wx * speed - P.vx) * (1 - Math.exp(-accel * dt));
     P.vz += (wz * speed - P.vz) * (1 - Math.exp(-accel * dt));
-    if ((input.jump || joy.jump) && P.grounded) { P.vy = 10; P.grounded = false; }   // peak ~2.7–3.0 (low–high fps): always clears the highest any boba ever hops (2.47)
+    if ((input.jump || joy.jump) && P.grounded) { P.vy = 13; P.grounded = false; }   // peak ~2.8: clears the highest any boba ever hops (~2.2), in about 0.43 s
     input.jump = false; joy.jump = false;
     // Mario-style jump: hold for the full height, let go early for a short hop, and fall faster than you rise
     const held = enabled && (keys.has('Space') || joy.held);
-    const grav = P.vy < 0 ? 16 * 1.75 : held ? 16 : 16 * 3.4;
-    P.vy = Math.max(-18, P.vy - grav * dt);
+    const G = 30;                                    // strong gravity with a fast launch: snappy, not floaty
+    const grav = P.vy < 0 ? G * 1.6 : held ? G : G * 3;
+    P.vy = Math.max(-26, P.vy - grav * dt);
 
-    const px = P.x, pz = P.z, prevD = Math.hypot(px, pz);
+    const px = P.x, pz = P.z, py = P.y, prevD = Math.hypot(px, pz);
     P.x += P.vx * dt; P.z += P.vz * dt; P.y += P.vy * dt;
 
     // cup wall (glass) with a doorway at the front
@@ -730,6 +730,15 @@ function makePlayer(scene, getBouncers) {
     P.wasGrounded = P.grounded;
     if (P.y <= f) { P.y = f; P.vy = 0; P.grounded = true; } else if (P.y > f + 0.02) P.grounded = false;
 
+    // landing help: falling toward a boba pulls you gently over its middle
+    if (P.vy < 0 && !P.grounded) {
+      let best = null, bd = 1e9;
+      for (const b of getBouncers()) {
+        const o = b.o, top = o.position.y + 2 * b.r * 0.96 * o.scale.y, dh = Math.hypot(P.x - o.position.x, P.z - o.position.z);
+        if (dh < b.r + 0.75 && P.y > top - 0.2 && P.y - top < 2.5 && dh < bd) { bd = dh; best = o; }
+      }
+      if (best) { const k = 1 - Math.exp(-6 * dt); P.x += (best.position.x - P.x) * k; P.z += (best.position.z - P.z) * k; }
+    }
     // bouncers: bump off their sides, and get launched if you land on top of one
     let launched = false;
     P.bounced = -1;
@@ -739,9 +748,9 @@ function makePlayer(scene, getBouncers) {
       const o = b.o, r = b.r * o.scale.x, top = o.position.y + 2 * b.r * 0.96 * o.scale.y;
       const dx = P.x - o.position.x, dz = P.z - o.position.z, dh = Math.hypot(dx, dz);
       if (dh > r + CHIBI.capR) continue;
-      if (P.vy <= 0 && P.y > top - 0.3 && P.y < top + 0.15 && dh < r * 0.95) {
-        P.y = top; P.vy = 8.6; P.grounded = false; launched = true; P.bounced = b.id ?? bi;
-      } else if (P.y < top - 0.3) {
+      if (P.vy <= 0 && (P.y > top - 0.55 || py >= top) && P.y < top + 0.25 && dh < r * 0.95 + 0.16) {   // forgiving: catch the edge, and fast falls never skip through
+        P.y = top; P.vy = 11.5; P.grounded = false; launched = true; P.bounced = b.id ?? bi;   // ~2.2 high, enough air to steer onto the next one
+      } else if (P.y < top - 0.55) {
         const push = (r + CHIBI.capR - dh) / (dh || 1);
         P.x += dx * push; P.z += dz * push;
       }
@@ -820,7 +829,7 @@ BOBA_MAT.envMap = GOLD_MAT.envMap = ENV;
 for (const b of bouncerList) b.o.material = BOBA_MAT;
 function setGold(b, on, until = 0) { b.gold = on; b.goldUntil = until; b.o.material = on ? GOLD_MAT : BOBA_MAT; }
 // one landing pops a bouncer: it squashes flat and vanishes, then grows back a while later
-const POP_TIME = 0.32, RESPAWN = 15, GROW = 0.5;
+const POP_TIME = 0.32, RESPAWN = 8, GROW = 0.5;   // popped boba come back after 8 s, so chains don't run dry
 let gameClock = 0;
 const aliveBouncers = () => bouncerList.filter((b) => b.alive);
 function popBouncer(b) { b.alive = false; b.deadAt = gameClock; }
