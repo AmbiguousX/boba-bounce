@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { U, LOW, FOG_COLOR, makeSky, makeEnvironment, makeBobaMaterial, makeTeaMaterial, makeGrassGroundMaterial, makeGlassMaterial,
   addWind, makeGrassTufts, makeParticles, makeMotes, makeRings, makeComposer } from './fx.js';
+import { makeMouth, makeFaceRig } from './face-rig.js';
 import { sfx, startMusic, stopMusic, setFever, toggleMute, isMuted } from './audio.js';
 
 // ================================================================ ANIMATIONS (same code as boba-bounce.animations.js)
@@ -191,7 +192,7 @@ function buildWorld() {
   // ---------------------------------------------------------------- the cup
   // sealed cup: one continuous glass wall, no doorway
   mesh('static_cup_wall_noShadow', [G(new THREE.CylinderGeometry(CUP.r + 1.2, CUP.r, CUP.h, 96, 1, true), C.glass, xf([0, CUP.h / 2, 0]))], M.glass, { cast: false });
-  mesh('static_cup_rim', [G(new THREE.TorusGeometry(CUP.r + 1.2, 0.2, 8, 128), C.white, xf([0, CUP.h, 0], [Math.PI / 2, 0, 0]))], M.gloss);
+  mesh('static_cup_rim', [G(new THREE.TorusGeometry(CUP.r + 1.2, 0.2, 8, 128), C.white, xf([0, CUP.h, 0], [Math.PI / 2, 0, 0]))], M.gloss, { cast: false });
   const floor = G(new THREE.CylinderGeometry(CUP.r - 0.02, CUP.r - 0.02, CUP.floor, 96, 1), C.tea, xf([0, CUP.floor / 2, 0]));
   paint(floor, (v) => (Math.floor(Math.hypot(v.x, v.z) / 1.8) % 2 ? C.tea : C.tea2));
   mesh('static_cup_floor', [floor], M.soft, { cast: false });
@@ -261,7 +262,7 @@ function buildWorld() {
 const CHIBI = { capR: 0.2, capLen: 0.4, legH: 0.177, bodyH: 0.24, headR: 0.215 };
 
 function makeChibi(colors = {}, base = 'male') {
-  const col = { body: '#ff9fbf', skin: '#fff3e6', ear: '#ffd6e0', eye: '#2b1a14', ...colors };
+  const col = { body: '#ff9fbf', skin: '#fff3e6', ear: '#ffd6e0', eye: '#2b1a14', mouthIn: '#6b1f2a', teeth: '#fff8f0', tongue: '#ff7f9e', ...colors };
   const mats = {};
   const mat = (c, rough = 0.55) => (mats[c + rough] ??= new THREE.MeshStandardMaterial({ color: c, roughness: rough }));
   const part = (geo, c, p = [0, 0, 0], s = [1, 1, 1], rough) => {
@@ -318,7 +319,8 @@ function makeChibi(colors = {}, base = 'male') {
   const neck = pivot('chibi_neck', [0, 0.235, 0]);
   hips.add(neck);
   const headR = CHIBI.headR;
-  neck.add(part(new THREE.SphereGeometry(headR, 32, 24), col.skin, [0, headR * 0.92, 0], [1.06, 0.95, 1]));
+  const head = part(new THREE.SphereGeometry(headR, 32, 24), col.skin, [0, headR * 0.92, 0], [1.06, 0.95, 1]);
+  neck.add(head);
   // round ears sticking out from the sides of the head: flat discs facing forward,
   // thin front-to-back, so they read as ears and keep the crown clear for hats
   for (const s of [-1, 1]) {
@@ -328,16 +330,24 @@ function makeChibi(colors = {}, base = 'male') {
     ear.add(part(new THREE.SphereGeometry(0.048, 16, 10), col.ear, [s * 0.02, 0, 0.018], [1, 1, 0.2]));
     neck.add(ear);
   }
-  // face: dot eyes (blinkable), tiny mouth
+  // face: dot eyes, and AmBig's animated mouth (a shader patch on the head with lips, teeth and tongue),
+  // both driven by the shared face rig: expressions, blinks and squints
   const eyes = [-1, 1].map((s) => {
     const e = part(new THREE.SphereGeometry(0.026, 12, 10), col.eye, [s * 0.075, headR * 0.98, headR * 0.93], [1, 1.25, 0.5], 0.3);
     e.add(part(new THREE.SphereGeometry(0.008, 6, 6), '#ffffff', [0.008, 0.011, 0.02], [1, 1, 1], 0.3));
     neck.add(e);
     return e;
   });
-  const mouth = part(new THREE.TorusGeometry(0.016, 0.005, 6, 12, Math.PI), col.eye, [0, headR * 0.72, headR * 0.99]);
-  mouth.rotation.z = Math.PI;
-  neck.add(mouth);
+  const mouth = makeMouth(col);          // its default head and mouth sizes are this chibi's
+  head.add(mouth.mesh);
+  const faceRig = makeFaceRig({
+    seed: 7, mouth, brows: [],
+    eyes: [eyes[1], eyes[0]].map((e) => ({ set({ blink, squint, wide }) { const w = 1 + 0.22 * wide; e.scale.set(w, lerp(1.25 * (1 - 0.64 * squint), 0.15, blink) * w, 0.5 * w); } })),
+  });
+  // each emote wears a face; the game can also hold one for a moment (setFace)
+  const EMOTE_FACE = { wave: 'happy', cheer: 'joy', dance: 'laugh', spin: 'joy', flip: 'surprised', sit: 'content', bow: 'content', shrug: 'unsure', sip: 'sip', proud: 'smug', think: 'thinking' };
+  let heldFace = null, heldT = 0;
+  function setFace(name, secs = 1.2) { heldFace = name; heldT = secs; }
 
   // anchors for wearables (match your categories)
   const anchors = {
@@ -455,13 +465,11 @@ function makeChibi(colors = {}, base = 'male') {
     neck.rotation.z += (P.neckZ - neck.rotation.z) * k(st.emote ? 12 : 6);
     flip.position.y = FLIP_Y + P.lift;
     flip.rotation.set(P.flipX, P.spin, 0);
-    mouth.scale.set(1 + 0.4 * P.mouthOpen, 1 + 1.4 * P.mouthOpen, 1);
-    // blink
-    st.nextBlink -= dt;
-    if (st.nextBlink <= 0) { st.blink = 0.14; st.nextBlink = 2 + Math.random() * 3.5; }
-    st.blink = Math.max(0, st.blink - dt);
-    const happy = st.emote === 'cheer' || st.emote === 'dance' || st.emote === 'sip' || st.emote === 'proud' ? 0.45 : 1;   // squinty happy eyes
-    for (const e of eyes) e.scale.y = (st.blink > 0 ? 0.15 : 1.25) * happy;
+    // face: an emote's face first, then one the game is holding, then whatever he's doing
+    heldT -= dt; if (heldT <= 0) heldFace = null;
+    faceRig.face.expression = (st.emote && EMOTE_FACE[st.emote]) || heldFace
+      || (!s.grounded ? (s.vy > 1 ? 'joy' : s.vy < -7 ? 'surprised' : 'happy') : 'happy');
+    faceRig.update(dt);
     // squash and stretch (constant volume)
     const sxz = 1 / Math.sqrt(P.sy);
     squash.scale.set(sxz, P.sy, sxz);
@@ -505,7 +513,7 @@ function makeChibi(colors = {}, base = 'male') {
     if (shoes) { anchors.foot_l.add(shoes.l); anchors.foot_r.add(shoes.r); }
     for (const f of feet) f.visible = !shoes;
   }
-  return { root, anchors, animate, emote, wearShoes, wear, setBase, get base() { return base; }, emotes: Object.keys(EMOTES), get playing() { return st.emote; }, colors: col, recolor(c) { for (const m of Object.values(mats)) if (m.color.getHexString() === new THREE.Color(col.body).getHexString()) m.color.set(c); col.body = c; } };
+  return { root, anchors, animate, emote, wearShoes, wear, setBase, get base() { return base; }, emotes: Object.keys(EMOTES), setFace, get playing() { return st.emote; }, colors: col, recolor(c) { for (const m of Object.values(mats)) if (m.color.getHexString() === new THREE.Color(col.body).getHexString()) m.color.set(c); col.body = c; } };
 }
 
 // ---------------------------------------------------------------- a few boba wearables sized for the chibi
@@ -873,6 +881,7 @@ const FEVER_AT = 20;                       // the last 20 seconds score double
 const COMBO_CAP = 10;                      // a chain bounce is worth its combo number, up to this
 const GOLD_POINTS = 10, GOLD_LIFE = 8;
 let score = 0, timeLeft = ROUND, countdown = 0, best = 0;
+let overEmotes = [], overT = 0, viewShift = 0;   // the results screen: emotes to play, a timer, how far the view slides aside
 let combo = 0, maxCombo = 0, fever = false, feverAmt = 0, nextGold = 0, fovKick = 0, shake = 0;
 try { best = parseInt(localStorage.getItem('bobaBounceBest2') || '0', 10) || 0; } catch (e) {}
 const $ = (id) => document.getElementById(id);
@@ -923,6 +932,11 @@ function endGame() {
   const isBest = score > best;
   if (isBest) { best = score; try { localStorage.setItem('bobaBounceBest2', String(best)); } catch (e) {} }
   ui.final.textContent = score; ui.best.textContent = `Best: ${best}`; show(ui.newBest, isBest && score > 0);
+  // he turns to face you and the camera comes in close for the results
+  { const P = player.P; P.vx = P.vz = 0; P.yaw = camYaw; }
+  camDistGoal = innerWidth > innerHeight ? 2.4 : 3.1; camPitch = 0.2;
+  overEmotes = isBest && score > 0 ? ['cheer', 'dance', 'wave'] : score >= 30 ? ['proud', 'wave'] : ['shrug', 'wave'];
+  overT = 0.5;
   ui.maxCombo.textContent = maxCombo > 1 ? `Longest chain: x${maxCombo}` : '';
   show(ui.over, true); show(ui.hud, false); document.body.classList.remove('playing');
 }
@@ -949,6 +963,7 @@ function scorePop(bi) {
   const mult = fever ? 2 : 1, pts = (Math.min(combo, COMBO_CAP) + (gold ? GOLD_POINTS : 0)) * mult;
   score += pts; ui.score.textContent = score;
   sound('boing', combo); if (gold) sound('gold');
+  if (gold) player.chibi.setFace('joy', 1.4); else if (combo >= 5) player.chibi.setFace('laugh', 0.9);
   popBouncer(b);
   ui.score.parentElement.classList.remove('bump'); void ui.score.parentElement.offsetWidth; ui.score.parentElement.classList.add('bump');
   const top = o.y + b.r * 1.6;
@@ -963,6 +978,7 @@ function scorePop(bi) {
   }
 }
 function breakCombo() {
+  if (combo >= 5) player.chibi.setFace('sad', 1.2);
   if (combo >= 3) { sound('break'); const P = player.P; floatText(P.x, P.y + 1.4, P.z, combo >= 8 ? 'AMAZING!' : combo >= 5 ? 'GREAT!' : 'NICE!', 'word'); }
   combo = 0; show(ui.combo, false);
 }
@@ -972,7 +988,7 @@ function spawnGold() {
   setGold(pool[Math.floor(Math.random() * pool.length)], true, gameClock + GOLD_LIFE);
 }
 function startFever() {
-  fever = true; setFever(true); sound('fever');
+  fever = true; setFever(true); sound('fever'); player.chibi.setFace('surprised', 1.5);
   show(ui.fever, true); document.body.classList.add('fever');
 }
 ui.mute.onclick = (e) => { e.currentTarget.blur(); ui.mute.classList.toggle('off', toggleMute()); };
@@ -981,7 +997,7 @@ addEventListener('keydown', (e) => { if (e.code === 'KeyM') ui.mute.classList.to
 
 // emotes on the number keys while playing
 addEventListener('keydown', (e) => {
-  if (state !== 'play' || !/^[0-9]$/.test(e.key)) return;
+  if ((state !== 'play' && state !== 'over') || !/^[0-9]$/.test(e.key)) return;
   const n = e.key === '0' ? 10 : parseInt(e.key, 10);
   if (n <= player.chibi.emotes.length) player.chibi.emote(player.chibi.emotes[n - 1]);
 });
@@ -1052,6 +1068,10 @@ function frame() {
   }
 
   const P = player.step(dt, camYaw, joy);
+  if (state === 'over' && P.grounded && !player.chibi.playing) {
+    overT -= realDt;
+    if (overT <= 0) { player.chibi.emote(overEmotes.length ? overEmotes.shift() : ['wave', 'dance', 'proud'][Math.floor(Math.random() * 3)]); overT = overEmotes.length ? 0.3 : 4; }
+  }
   if (state === 'play' && P.bounced >= 0) scorePop(P.bounced);
   else if (state === 'play' && combo > 0 && P.grounded) breakCombo();
   // effects clock and fever look
@@ -1082,6 +1102,9 @@ function frame() {
   const fov = 50 + (REDUCED_MOTION ? 0 : fovKick) + feverAmt * 3;
   if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
   if (shake > 0 && !REDUCED_MOTION) camera.position.add(new THREE.Vector3((Math.random() - 0.5) * shake * 0.4, (Math.random() - 0.5) * shake * 0.4, 0).applyQuaternion(camera.quaternion));
+  viewShift += ((state === 'over' ? 1 : 0) - viewShift) * (1 - Math.exp(-4 * realDt));
+  if (viewShift > 0.002) { const wide = innerWidth > innerHeight; camera.setViewOffset(innerWidth, innerHeight, wide ? innerWidth * 0.2 * viewShift : 0, wide ? 0 : innerHeight * 0.2 * viewShift, innerWidth, innerHeight); }
+  else if (camera.view?.enabled) camera.clearViewOffset();
   post.composer.render(realDt);
   requestAnimationFrame(frame);
 }

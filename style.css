@@ -75,3 +75,7 @@ body.fever #time{color:#7b5cff}
 #mute.off i{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23d93a52' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 9h4l5-4v14l-5-4H4z' fill='%23d93a52'/%3E%3Cpath d='M17 9l5 6M22 9l-5 6'/%3E%3C/svg%3E")}
 .touch.playing #mute{bottom:auto;top:calc(max(12px,env(safe-area-inset-top)) + 58px)}
 @media (prefers-reduced-motion: reduce){#fever{animation:none}}
+/* results: the card steps aside so the chibi can celebrate (to the right on wide screens, to the bottom on tall ones) */
+#over{background:linear-gradient(90deg,#fff6ea00 30%,#ffd6e077)}
+@media (min-aspect-ratio: 1/1){#over{justify-content:flex-end;padding-right:max(6vw,16px)}#over .card{width:min(400px,46vw)}}
+@media (max-aspect-ratio: 1/1){#over{align-items:flex-end;padding-bottom:max(66px,env(safe-area-inset-bottom));background:linear-gradient(180deg,#fff6ea00 35%,#ffd6e077)}#over .bobas{display:none}#over .card{padding:20px 22px 20px}#over .big{font-size:64px}}
