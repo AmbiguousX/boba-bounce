@@ -703,11 +703,12 @@ function makePlayer(scene, getBouncers) {
     const speed = P.grounded ? 2.6 : 3.2, accel = P.grounded ? 14 : 10;   // more speed and steering in the air, to reach the next boba
     P.vx += (wx * speed - P.vx) * (1 - Math.exp(-accel * dt));
     P.vz += (wz * speed - P.vz) * (1 - Math.exp(-accel * dt));
-    if ((input.jump || joy.jump) && P.grounded) { P.vy = 8.2; P.grounded = false; }   // peak ~2.1 (was ~2.9): a lower, quicker hop
+    if ((input.jump || joy.jump) && P.grounded) { P.vy = 8.2; P.grounded = false; P.autoRise = false; }   // peak ~2.1 (was ~2.9): a lower, quicker hop
     input.jump = false; joy.jump = false;
     // Mario-style jump: hold for the full height, let go early for a short hop, and fall faster than you rise
     const held = enabled && (keys.has('Space') || joy.held);
-    const grav = P.vy < 0 ? 16 * 1.75 : held ? 16 : 16 * 3.4;
+    if (P.vy <= 0) P.autoRise = false;
+    const grav = P.vy < 0 ? 16 * 1.75 : held || P.autoRise ? 16 : 16 * 3.4;   // a boba bounce always rises in full, held or not
     P.vy = Math.max(-18, P.vy - grav * dt);
 
     const px = P.x, pz = P.z, py = P.y, prevD = Math.hypot(px, pz);
@@ -748,7 +749,7 @@ function makePlayer(scene, getBouncers) {
       const dx = P.x - o.position.x, dz = P.z - o.position.z, dh = Math.hypot(dx, dz);
       if (dh > r + CHIBI.capR) continue;
       if (P.vy < 0 && !P.wasGrounded && py >= top - 0.15 && P.y < top + 0.25 && dh < r * 0.95 + 0.12) {   // only coming down onto it from above (walking into one never counts); a little edge forgiveness
-        P.y = top; P.vy = 7.6; P.grounded = false; launched = true; P.bounced = b.id ?? bi;   // ~1.8 high (was ~2.3), still enough air to steer onto the next one
+        P.y = top; P.vy = 7.6; P.grounded = false; P.autoRise = true; launched = true; P.bounced = b.id ?? bi;   // ~1.8 high (was ~2.3), still enough air to steer onto the next one
       } else if (P.y < top - 0.3) {
         const push = (r + CHIBI.capR - dh) / (dh || 1);
         P.x += dx * push; P.z += dz * push;
@@ -769,7 +770,7 @@ function makePlayer(scene, getBouncers) {
     return P;
   }
   function reset(x, z, yaw) {
-    Object.assign(P, { x, y: 0.1, z, vx: 0, vz: 0, vy: 0, yaw, grounded: true, wasGrounded: true, bounced: -1 });
+    Object.assign(P, { x, y: 0.1, z, vx: 0, vz: 0, vy: 0, yaw, grounded: true, wasGrounded: true, bounced: -1, autoRise: false });
     keys.clear();
   }
   return { chibi, capsule, P, step, reset, set enabled(v) { enabled = v; if (!v) keys.clear(); }, get enabled() { return enabled; } };
